@@ -1,0 +1,1347 @@
+<!DOCTYPE html>
+<!-- saved from url=(0045)https://analisisdevenacionfoliar.netlify.app/ -->
+<html lang="es"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+
+<!-- This site is hosted on Netlify. Anyone can build and deploy a site
+     like this one for free: https://netlify.new/?utm_campaign=loops&utm_source=ai-legible&utm_medium=owned&utm_content=comment&utm_id=dd81a57a-c35e-435e-ad3f-0b3725dc1afc
+     Netlify hosting facts for this site: static/SSR served via Netlify Edge. -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Análisis de venación foliar mediante teoría de grafos</title>
+<style>
+  :root{
+    --bg:#0f1512; --panel:#16201b; --panel2:#1c2921; --line:#2b3b32;
+    --accent:#5fb87a; --accent2:#8fd6a6; --text:#e9f2ec; --muted:#93a89c;
+    --warn:#e0b34d; --danger:#e0715f;
+  }
+  @media (prefers-color-scheme:dark){ :root:not([data-theme="light"]){ --bg:#0f1512; } }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;}
+  header{padding:18px 16px 10px;text-align:center;border-bottom:1px solid var(--line);}
+  header h1{font-size:18px;margin:0 0 4px;color:var(--accent2);}
+  header p{margin:0;color:var(--muted);font-size:12.5px;}
+  .wrap{max-width:1100px;margin:0 auto;padding:16px;}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:16px;}
+  .panel h2{font-size:14px;margin:0 0 10px;color:var(--accent2);text-transform:uppercase;letter-spacing:0.5px;}
+  .row{display:flex;flex-wrap:wrap;gap:10px;align-items:center;}
+  label{font-size:12.5px;color:var(--muted);display:block;margin-bottom:3px;}
+  input[type=number], input[type=text]{
+    background:var(--panel2);border:1px solid var(--line);border-radius:6px;color:var(--text);
+    padding:6px 8px;font-size:13px;width:90px;
+  }
+  input[type=file]{color:var(--muted);font-size:12.5px;}
+  button{
+    background:var(--accent);color:#0b1410;border:none;border-radius:8px;
+    padding:9px 14px;font-size:13px;font-weight:600;cursor:pointer;
+  }
+  button.secondary{background:var(--panel2);color:var(--text);border:1px solid var(--line);}
+  button:disabled{opacity:0.45;cursor:not-allowed;}
+  button:active{transform:scale(0.98);}
+  .stage-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;}
+  .stage{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:8px;text-align:center;}
+  .stage span{display:block;font-size:11px;color:var(--muted);margin-bottom:6px;}
+  .stage canvas{max-width:100%;border-radius:4px;background:#000;}
+  table{width:100%;border-collapse:collapse;font-size:12.5px;}
+  th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);}
+  th{color:var(--muted);font-weight:600;}
+  .indicator-value{font-size:20px;font-weight:700;color:var(--accent2);}
+  .indicators-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:10px;}
+  .ind-card{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:10px;text-align:center;}
+  .ind-card label{margin:0 0 4px;}
+  .msg{font-size:12.5px;color:var(--muted);margin-top:8px;}
+  .msg.ok{color:var(--accent2);}
+  .msg.warn{color:var(--warn);}
+  .flex-between{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;}
+  .calib-hint{font-size:12px;color:var(--muted);}
+  #origCanvasWrap{position:relative;display:inline-block;max-width:100%;}
+  #origCanvas{max-width:100%;border-radius:8px;border:1px solid var(--line);touch-action:none;cursor:crosshair;}
+  .small{font-size:11.5px;color:var(--muted);}
+  details summary{cursor:pointer;color:var(--accent2);font-size:13px;margin-bottom:6px;}
+  code{background:var(--panel2);padding:1px 5px;border-radius:4px;}
+  .test-ok{color:var(--accent2);} .test-fail{color:var(--danger);}
+  footer{text-align:center;color:var(--muted);font-size:11px;padding:20px 16px 40px;}
+</style>
+</head>
+<body>
+<header>
+  <h1>Análisis de venación foliar mediante teoría de grafos</h1>
+  <p>Prototipo local · procesamiento en el navegador · Sato et al. (1998) + Zhang &amp; Suen (1984)</p>
+</header>
+<div class="wrap">
+
+  <div class="panel">
+    <h2>1. Cargar fotografía</h2>
+    <div class="row">
+      <input type="file" id="fileInput" accept="image/*">
+      <button id="loadTestImgBtn" class="secondary">Usar imagen de ejemplo</button>
+    </div>
+    <div style="margin-top:12px;" id="origCanvasWrap">
+      <canvas id="origCanvas"></canvas>
+    </div>
+    <p class="calib-hint" id="calibHint">Cargá una imagen para continuar.</p>
+  </div>
+
+  <div class="panel" id="calibPanel" style="display:none;">
+    <h2>2. Calibración métrica</h2>
+    <p class="small">Tocá dos puntos sobre la referencia (regla/cinta métrica) en la imagen de arriba y escribí la distancia real entre ellos.</p>
+    <div class="row">
+      <div><label>Distancia real (mm)</label><input type="number" id="calibMM" value="10" step="0.1"></div>
+      <button id="resetCalibBtn" class="secondary">Reiniciar puntos</button>
+    </div>
+    <p class="msg" id="calibStatus">Puntos: 0 / 2</p>
+  </div>
+
+  <div class="panel" id="paramsPanel" style="display:none;">
+    <h2>3. Parámetros operativos</h2>
+    <div class="row">
+      <div><label>σ mínima</label><input type="number" id="sigmaMin" value="1.0" step="0.5"></div>
+      <div><label>σ máxima</label><input type="number" id="sigmaMax" value="3.0" step="0.5"></div>
+      <div><label>Nº de escalas</label><input type="number" id="numScales" value="3" step="1" min="1"></div>
+      <div><label>Recorte de borde (px)</label><input type="number" id="edgeTrim" value="12" step="1"></div>
+      <div><label>Área mínima limpieza (px)</label><input type="number" id="minArea" value="150" step="10"></div>
+      <div><label>Auto-bucle mínimo (px)</label><input type="number" id="minSelfLoop" value="6" step="1"></div>
+      <div>
+        <label>Polaridad</label>
+        <select id="polaritySel" style="background:var(--panel2);border:1px solid var(--line);color:var(--text);border-radius:6px;padding:6px;">
+          <option value="bright">Nervaduras claras sobre fondo oscuro</option>
+          <option value="dark">Nervaduras oscuras sobre fondo claro</option>
+        </select>
+      </div>
+      <div>
+        <label>Sensibilidad del umbral (fracción del automático)</label>
+        <input type="number" id="thresholdFactor" value="0.35" step="0.05" min="0.05" max="1">
+      </div>
+      <div>
+        <label>Umbral manual fijo (0 = usar la fracción de arriba)</label>
+        <input type="number" id="manualThreshold" value="0" step="1" min="0" max="255">
+      </div>
+    </div>
+    <div class="row" style="margin-top:12px;">
+      <button id="processBtn" disabled="">Procesar imagen</button>
+      <button id="sensitivityBtn" class="secondary" disabled="">Análisis de sensibilidad (±10%)</button>
+      <button id="sweepBtn" class="secondary" disabled="">Ejecutar barrido de umbral (10%–100%)</button>
+      <button id="exportBtn" class="secondary" disabled="">Exportar resultados (JSON)</button>
+    </div>
+    <p class="msg" id="processStatus"></p>
+  </div>
+
+  <div class="panel" id="sweepPanel" style="display:none;">
+    <h2>3b. Barrido sistemático del umbral</h2>
+    <p class="small">Corre 19 valores de umbral (10% a 100% del automático, cada 5 puntos) sobre la imagen cargada, y muestra cómo cambian |V|, |E|, C y μ en cada uno. Al terminar, vuelve a dejar procesada la imagen con el umbral definitivo (0,35).</p>
+    <table>
+      <thead><tr><th>Umbral (%)</th><th>|V|</th><th>|E|</th><th>C</th><th>μ</th></tr></thead>
+      <tbody id="sweepBody"></tbody>
+    </table>
+  </div>
+
+  <div class="panel" id="stagesPanel" style="display:none;">
+    <h2>4. Etapas intermedias</h2>
+    <div class="stage-grid">
+      <div class="stage"><span>Escala de grises</span><canvas id="stGray"></canvas></div>
+      <div class="stage"><span>Máscara hoja/fondo</span><canvas id="stMask"></canvas></div>
+      <div class="stage"><span>Corrección de iluminación</span><canvas id="stIllum"></canvas></div>
+      <div class="stage"><span>Realce multiescala (Sato)</span><canvas id="stVessel"></canvas></div>
+      <div class="stage"><span>Binaria (umbral + limpieza)</span><canvas id="stBinary"></canvas></div>
+      <div class="stage"><span>Esqueleto (Zhang-Suen)</span><canvas id="stSkeleton"></canvas></div>
+      <div class="stage"><span>Grafo sobre imagen original</span><canvas id="stGraph"></canvas></div>
+    </div>
+  </div>
+
+  <div class="panel" id="resultsPanel" style="display:none;">
+    <h2>5. Indicadores</h2>
+    <div class="indicators-grid">
+      <div class="ind-card"><label>|V| vértices</label><div class="indicator-value" id="indV">–</div></div>
+      <div class="ind-card"><label>|E| aristas</label><div class="indicator-value" id="indE">–</div></div>
+      <div class="ind-card"><label>Componentes C</label><div class="indicator-value" id="indC">–</div></div>
+      <div class="ind-card"><label>Ciclomático μ</label><div class="indicator-value" id="indMu">–</div></div>
+      <div class="ind-card"><label>Longitud total (mm)</label><div class="indicator-value" id="indLen">–</div></div>
+      <div class="ind-card"><label>Densidad (mm/mm²)</label><div class="indicator-value" id="indDens">–</div></div>
+    </div>
+    <details style="margin-top:12px;">
+      <summary>Distribución de grados</summary>
+      <table id="degreeTable"><thead><tr><th>Grado</th><th>Cantidad de vértices</th></tr></thead><tbody></tbody></table>
+    </details>
+  </div>
+
+  <div class="panel" id="sensitivityPanel" style="display:none;">
+    <h2>6. Sensibilidad al umbral</h2>
+    <table>
+      <thead><tr><th>Variante</th><th>Umbral</th><th>|V|</th><th>|E|</th><th>C</th><th>μ</th></tr></thead>
+      <tbody id="sensitivityBody"></tbody>
+    </table>
+    <p class="small" id="sensitivityCV" style="margin-top:8px;"></p>
+  </div>
+
+  <div class="panel" id="manualPanel" style="display:none;">
+    <h2>6. Trazado manual de referencia</h2>
+    <p class="small">Dibujá con el dedo o el mouse sobre las nervaduras que ves en la foto. Cuando termines, calculá la concordancia con lo que extrajo la app.</p>
+    <div class="row" style="margin-bottom:8px;">
+      <button id="manualUndoBtn" class="secondary">Deshacer último trazo</button>
+      <button id="manualClearBtn" class="secondary">Limpiar todo</button>
+      <button id="manualEraserBtn" class="secondary">Activar goma de borrar</button>
+      <div><label>Tolerancia (mm, o px si no hay calibración)</label><input type="number" id="manualTolerance" value="1" step="0.5"></div>
+    </div>
+    <div style="position:relative; display:inline-block; max-width:100%;">
+      <canvas id="manualBaseCanvas" style="max-width:100%; border-radius:8px; border:1px solid var(--line); display:block;"></canvas>
+      <canvas id="manualDrawCanvas" style="position:absolute; top:0; left:0; max-width:100%; touch-action:none; cursor:crosshair;"></canvas>
+    </div>
+    <div class="row" style="margin-top:10px;">
+      <button id="manualComputeBtn">Calcular concordancia</button>
+    </div>
+    <div class="indicators-grid" style="margin-top:12px;" id="manualResultsGrid"></div>
+  </div>
+
+  <div class="panel">
+    <h2>7. Verificación con grafos sintéticos</h2>
+    <p class="small">Corre los 5 casos previstos en el M1 (árbol, ciclo simple, malla con varios ciclos, dos componentes, multigrafo) para comprobar que los cálculos coinciden con los valores teóricos conocidos.</p>
+    <button id="runSyntheticBtn" class="secondary">Ejecutar pruebas sintéticas</button>
+    <table style="margin-top:10px;">
+      <thead><tr><th>Caso</th><th>Esperado (V,E,C,μ)</th><th>Obtenido (V,E,C,μ)</th><th>Resultado</th></tr></thead>
+      <tbody id="syntheticBody"></tbody>
+    </table>
+  </div>
+
+</div>
+<footer>Prototipo desarrollado para el Trabajo Final de Grado · procesamiento 100% local, ninguna imagen sale del dispositivo.</footer>
+
+<script>
+/* =============== NÚCLEO: grafos / esqueleto =============== */
+// ---- Núcleo de grafos/esqueleto (funciones puras, sin DOM) ----
+
+function makeGrid(w, h, fill) {
+  const g = new Uint8Array(w * h);
+  if (fill) g.fill(1);
+  return { w, h, data: g };
+}
+function get(g, x, y) {
+  if (x < 0 || y < 0 || x >= g.w || y >= g.h) return 0;
+  return g.data[y * g.w + x];
+}
+function set(g, x, y, v) { g.data[y * g.w + x] = v; }
+
+const N8 = [[0,-1],[1,-1],[1,0],[1,1],[0,1],[-1,1],[-1,0],[-1,-1]]; // orden P2..P9 (N, NE, E, SE, S, SW, W, NW)
+
+function neighborsClockwise(g, x, y) {
+  return N8.map(([dx,dy]) => get(g, x+dx, y+dy));
+}
+
+// ---- Zhang-Suen thinning ----
+function zhangSuenThin(g, maxIter = 200) {
+  let w = g.w, h = g.h;
+  let cur = new Uint8Array(g.data); // copy
+  let grid = { w, h, data: cur };
+  for (let iter = 0; iter < maxIter; iter++) {
+    let changed = false;
+    for (let sub = 0; sub < 2; sub++) {
+      const toDelete = [];
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+          if (get(grid, x, y) !== 1) continue;
+          const P = neighborsClockwise(grid, x, y); // P2..P9
+          const B = P.reduce((a,b)=>a+b,0);
+          if (B < 2 || B > 6) continue;
+          let A = 0;
+          for (let i = 0; i < 8; i++) {
+            if (P[i] === 0 && P[(i+1)%8] === 1) A++;
+          }
+          if (A !== 1) continue;
+          const [P2,P3,P4,P5,P6,P7,P8,P9] = P;
+          if (sub === 0) {
+            if (P2*P4*P6 !== 0) continue;
+            if (P4*P6*P8 !== 0) continue;
+          } else {
+            if (P2*P4*P8 !== 0) continue;
+            if (P2*P6*P8 !== 0) continue;
+          }
+          toDelete.push(y*w+x);
+        }
+      }
+      if (toDelete.length > 0) {
+        changed = true;
+        for (const idx of toDelete) grid.data[idx] = 0;
+      }
+    }
+    if (!changed) break;
+  }
+  return grid;
+}
+
+// ---- Etiquetado de componentes conexas (8-conectividad) ----
+function labelComponents(g) {
+  const { w, h, data } = g;
+  const labels = new Int32Array(w*h).fill(-1);
+  let nextLabel = 0;
+  const comps = [];
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const idx = y*w+x;
+      if (data[idx] !== 1 || labels[idx] !== -1) continue;
+      // BFS
+      const stack = [[x,y]];
+      labels[idx] = nextLabel;
+      const pts = [];
+      while (stack.length) {
+        const [cx,cy] = stack.pop();
+        pts.push([cx,cy]);
+        for (const [dx,dy] of N8) {
+          const nx=cx+dx, ny=cy+dy;
+          if (nx<0||ny<0||nx>=w||ny>=h) continue;
+          const nidx = ny*w+nx;
+          if (data[nidx]===1 && labels[nidx]===-1) {
+            labels[nidx] = nextLabel;
+            stack.push([nx,ny]);
+          }
+        }
+      }
+      comps.push(pts);
+      nextLabel++;
+    }
+  }
+  return { labels, comps };
+}
+
+function removeSmallComponents(g, minArea) {
+  const { comps } = labelComponents(g);
+  const out = { w: g.w, h: g.h, data: new Uint8Array(g.data) };
+  for (const pts of comps) {
+    if (pts.length < minArea) {
+      for (const [x,y] of pts) set(out, x, y, 0);
+    }
+  }
+  return out;
+}
+
+// ---- Extracción de grafo desde el esqueleto ----
+function pixelDegree(g, x, y) {
+  const P = neighborsClockwise(g, x, y);
+  return P.reduce((a,b)=>a+b,0);
+}
+
+function clusterNodePixels(g, nodePixSet, radius = 2) {
+  // agrupa píxeles-nodo cercanos (radius, distancia Chebyshev) en un único nodo
+  const pts = Array.from(nodePixSet).map(k => {
+    const x = k % g.w, y = Math.floor(k / g.w);
+    return [x,y,k];
+  });
+  const visited = new Set();
+  const clusters = [];
+  for (const p of pts) {
+    if (visited.has(p[2])) continue;
+    const stack = [p];
+    visited.add(p[2]);
+    const cluster = [p];
+    while (stack.length) {
+      const [cx,cy] = stack.pop();
+      for (const q of pts) {
+        if (visited.has(q[2])) continue;
+        if (Math.abs(q[0]-cx) <= radius && Math.abs(q[1]-cy) <= radius) {
+          visited.add(q[2]);
+          cluster.push(q);
+          stack.push(q);
+        }
+      }
+    }
+    clusters.push(cluster);
+  }
+  return clusters.map(c => {
+    const cx = c.reduce((a,p)=>a+p[0],0)/c.length;
+    const cy = c.reduce((a,p)=>a+p[1],0)/c.length;
+    const pixSet = new Set(c.map(p=>p[2]));
+    return { x: cx, y: cy, pixSet };
+  });
+}
+
+function extractGraph(skeleton, pxPerMM = 1, minSelfLoopPx = 6) {
+  const g = skeleton;
+  const w = g.w, h = g.h;
+  const nodePix = new Set(); // índices de píxeles que son nodo (deg!=2) o deg==1
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      if (get(g,x,y) !== 1) continue;
+      const d = pixelDegree(g, x, y);
+      if (d === 1 || d >= 3) nodePix.add(y*w+x);
+    }
+  }
+  // caso especial: componente sin ningún píxel-nodo (bucle puro) -> un nodo sintético con auto-bucle
+  const { comps } = labelComponents(g);
+  const syntheticLoopComponents = [];
+  for (const pts of comps) {
+    let hasNode = false;
+    for (const [x,y] of pts) { if (nodePix.has(y*w+x)) { hasNode = true; break; } }
+    if (!hasNode && pts.length > 0) syntheticLoopComponents.push(pts);
+  }
+
+  const clusters = clusterNodePixels(g, nodePix, 2);
+  // mapa píxel -> índice de nodo (cluster)
+  const pixToNode = new Map();
+  clusters.forEach((c, i) => { for (const k of c.pixSet) pixToNode.set(k, i); });
+
+  const nodes = clusters.map((c, i) => ({ id: i, x: c.x, y: c.y }));
+  const edges = [];
+
+  // recorrer aristas: desde cada píxel-nodo, seguir cada dirección no visitada hacia otro nodo
+  const visitedSteps = new Set(); // 'x,y->nx,ny' para no duplicar el mismo paso en ambas direcciones dentro de una traza
+  const edgeKeySeen = new Set();
+
+  function stepKey(x,y,nx,ny){ return x+","+y+">"+nx+","+ny; }
+
+  for (const c of clusters) {
+    for (const startKey of c.pixSet) {
+      const sx = startKey % w, sy = Math.floor(startKey / w);
+      for (const [dx,dy] of N8) {
+        const nx = sx+dx, ny = sy+dy;
+        if (nx<0||ny<0||nx>=w||ny>=h) continue;
+        if (get(g,nx,ny)!==1) continue;
+        const nk = ny*w+nx;
+        if (c.pixSet.has(nk)) continue; // vecino dentro del mismo cluster de nodo
+        const sk = stepKey(sx,sy,nx,ny);
+        if (visitedSteps.has(sk)) continue;
+        // trazar el camino
+        const path = [[sx,sy],[nx,ny]];
+        visitedSteps.add(sk);
+        visitedSteps.add(stepKey(nx,ny,sx,sy));
+        let px = sx, py = sy, cx = nx, cy = ny;
+        let endedAtNode = pixToNode.has(cy*w+cx);
+        let safety = w*h;
+        while (!endedAtNode && safety-- > 0) {
+          // buscar siguiente píxel del camino (grado 2, no volver atrás)
+          let found = null;
+          for (const [ddx,ddy] of N8) {
+            const ax = cx+ddx, ay = cy+ddy;
+            if (ax<0||ay<0||ax>=w||ay>=h) continue;
+            if (get(g,ax,ay)!==1) continue;
+            if (ax===px && ay===py) continue;
+            found = [ax,ay];
+            break;
+          }
+          if (!found) break; // camino roto (no debería pasar en esqueleto válido)
+          px = cx; py = cy; cx = found[0]; cy = found[1];
+          path.push([cx,cy]);
+          visitedSteps.add(stepKey(px,py,cx,cy));
+          visitedSteps.add(stepKey(cx,cy,px,py));
+          endedAtNode = pixToNode.has(cy*w+cx);
+        }
+        if (!endedAtNode) continue; // camino incompleto, descartar
+        const nodeA = pixToNode.get(sy*w+sx);
+        const nodeB = pixToNode.get(cy*w+cx);
+        // evitar registrar la misma arista dos veces (una vez por cada extremo de inicio)
+        let length = 0;
+        for (let i = 1; i < path.length; i++) {
+          const [x1,y1] = path[i-1], [x2,y2] = path[i];
+          length += Math.hypot(x2-x1, y2-y1);
+        }
+        const lengthMM = length / pxPerMM;
+        if (nodeA === nodeB && length < minSelfLoopPx) continue; // descartar auto-bucle espurio
+        const key = [nodeA, nodeB, Math.round(length*10)].sort().join('-') + '|' + path.length;
+        // usamos un key basado en extremos ordenados + longitud para evitar contar 2 veces la misma traza
+        const dedupKey = nodeA <= nodeB
+          ? `${nodeA}_${nodeB}_${sx}_${sy}_${cx}_${cy}`
+          : `${nodeB}_${nodeA}_${cx}_${cy}_${sx}_${sy}`;
+        edges.push({ a: nodeA, b: nodeB, lengthPx: length, lengthMM, path });
+      }
+    }
+  }
+
+  // deduplicar aristas idénticas (misma traza recorrida desde ambos extremos)
+  const dedupEdges = [];
+  const seen = new Set();
+  for (const e of edges) {
+    const p0 = e.path[0], p1 = e.path[e.path.length-1];
+    const fwd = `${p0[0]},${p0[1]}|${p1[0]},${p1[1]}`;
+    const rev = `${p1[0]},${p1[1]}|${p0[0]},${p0[1]}`;
+    if (seen.has(fwd) || seen.has(rev)) continue;
+    seen.add(fwd);
+    dedupEdges.push(e);
+  }
+
+  // nodos sintéticos para bucles puros (componentes sin ramificación)
+  let nextId = nodes.length;
+  for (const pts of syntheticLoopComponents) {
+    const [x0,y0] = pts[0];
+    const id = nextId++;
+    nodes.push({ id, x: x0, y: y0, synthetic: true });
+    const lengthPx = pts.length; // longitud aproximada = cantidad de píxeles del bucle
+    dedupEdges.push({ a: id, b: id, lengthPx, lengthMM: lengthPx / pxPerMM, path: pts });
+  }
+
+  return collapseDegree2({ nodes, edges: dedupEdges });
+}
+
+function collapseDegree2({ nodes, edges }) {
+  // calcula grado y colapsa nodos (no sintéticos en bucle) con grado exactamente 2 fusionando sus dos aristas
+  let changed = true;
+  let curNodes = nodes.map(n => ({...n}));
+  let curEdges = edges.map(e => ({...e}));
+  let guard = 0;
+  while (changed && guard++ < 10000) {
+    changed = false;
+    const degree = new Map();
+    const incident = new Map();
+    for (const n of curNodes) { degree.set(n.id, 0); incident.set(n.id, []); }
+    for (const e of curEdges) {
+      degree.set(e.a, (degree.get(e.a)||0) + 1);
+      if (e.a !== e.b) degree.set(e.b, (degree.get(e.b)||0) + 1);
+      else degree.set(e.a, (degree.get(e.a)||0) + 1); // self-loop cuenta 2 en el mismo nodo (ya sumado arriba, ajustar)
+      incident.get(e.a).push(e);
+      if (e.a !== e.b) incident.get(e.b).push(e);
+    }
+    for (const n of curNodes) {
+      if (n.id === undefined) continue;
+      const inc = incident.get(n.id) || [];
+      const isSelfLoopNode = inc.length === 1 && inc[0].a === inc[0].b;
+      if (isSelfLoopNode) continue; // no colapsar nodos sintéticos de bucle
+      if (inc.length === 2 && inc[0] !== inc[1]) {
+        const [e1, e2] = inc;
+        if (e1.a === e1.b || e2.a === e2.b) continue; // no tocar aristas que ya son bucles
+        const other1 = e1.a === n.id ? e1.b : e1.a;
+        const other2 = e2.a === n.id ? e2.b : e2.a;
+        // fusionar en una arista other1-other2
+        const mergedLengthPx = e1.lengthPx + e2.lengthPx;
+        const mergedPath = (e1.a === n.id ? [...e1.path].reverse() : e1.path)
+          .concat((e2.a === n.id ? e2.path : [...e2.path].reverse()).slice(1));
+        curEdges = curEdges.filter(e => e !== e1 && e !== e2);
+        curEdges.push({ a: other1, b: other2, lengthPx: mergedLengthPx, lengthMM: mergedLengthPx / (e1.lengthPx/ (e1.lengthMM||1) || 1), path: mergedPath });
+        curNodes = curNodes.filter(nn => nn.id !== n.id);
+        changed = true;
+        break;
+      }
+    }
+  }
+  return { nodes: curNodes, edges: curEdges };
+}
+
+// ---- Indicadores del grafo ----
+function computeIndicators(graph) {
+  const { nodes, edges } = graph;
+  const V = nodes.length;
+  const E = edges.length;
+  // componentes conexas (union-find)
+  const parent = new Map();
+  nodes.forEach(n => parent.set(n.id, n.id));
+  function find(a){ while(parent.get(a)!==a){ parent.set(a, parent.get(parent.get(a))); a = parent.get(a);} return a; }
+  function union(a,b){ const ra=find(a), rb=find(b); if(ra!==rb) parent.set(ra,rb); }
+  for (const e of edges) union(e.a, e.b);
+  const roots = new Set(nodes.map(n => find(n.id)));
+  const C = roots.size;
+  const mu = E - V + C;
+  const degree = new Map();
+  nodes.forEach(n => degree.set(n.id, 0));
+  for (const e of edges) {
+    degree.set(e.a, (degree.get(e.a)||0)+1);
+    degree.set(e.b, (degree.get(e.b)||0)+1);
+  }
+  const totalLengthMM = edges.reduce((a,e)=>a+e.lengthMM, 0);
+  return { V, E, C, mu, degree: Object.fromEntries(degree), totalLengthMM };
+}
+
+
+
+/* =============== NÚCLEO: filtros de imagen =============== */
+// ---- Filtros de imagen en escala de grises (Float32Array), sin dependencias ----
+
+function gaussianKernel1D(sigma) {
+  const radius = Math.max(1, Math.ceil(sigma * 3));
+  const size = 2*radius + 1;
+  const kernel = new Float64Array(size);
+  let sum = 0;
+  for (let i = -radius; i <= radius; i++) {
+    const v = Math.exp(-(i*i) / (2*sigma*sigma));
+    kernel[i+radius] = v;
+    sum += v;
+  }
+  for (let i = 0; i < size; i++) kernel[i] /= sum;
+  return { kernel, radius };
+}
+
+function convolveSeparable(src, w, h, sigma) {
+  const { kernel, radius } = gaussianKernel1D(sigma);
+  const tmp = new Float32Array(w*h);
+  const out = new Float32Array(w*h);
+  // horizontal
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      let acc = 0;
+      for (let k = -radius; k <= radius; k++) {
+        let xx = x+k;
+        if (xx < 0) xx = 0; else if (xx >= w) xx = w-1;
+        acc += src[y*w+xx] * kernel[k+radius];
+      }
+      tmp[y*w+x] = acc;
+    }
+  }
+  // vertical
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      let acc = 0;
+      for (let k = -radius; k <= radius; k++) {
+        let yy = y+k;
+        if (yy < 0) yy = 0; else if (yy >= h) yy = h-1;
+        acc += tmp[yy*w+x] * kernel[k+radius];
+      }
+      out[y*w+x] = acc;
+    }
+  }
+  return out;
+}
+
+function otsuThreshold(values) {
+  // values: Float32Array normalizado 0..255
+  const hist = new Array(256).fill(0);
+  for (let i = 0; i < values.length; i++) {
+    let b = Math.round(values[i]);
+    if (b < 0) b = 0; if (b > 255) b = 255;
+    hist[b]++;
+  }
+  const total = values.length;
+  let sum = 0;
+  for (let t = 0; t < 256; t++) sum += t*hist[t];
+  let sumB = 0, wB = 0, wF = 0, maxVar = -1, threshold = 127;
+  for (let t = 0; t < 256; t++) {
+    wB += hist[t];
+    if (wB === 0) continue;
+    wF = total - wB;
+    if (wF === 0) break;
+    sumB += t*hist[t];
+    const mB = sumB/wB;
+    const mF = (sum-sumB)/wF;
+    const varBetween = wB*wF*(mB-mF)*(mB-mF);
+    if (varBetween > maxVar) { maxVar = varBetween; threshold = t; }
+  }
+  return threshold;
+}
+
+function normalizeTo255(arr) {
+  let min = Infinity, max = -Infinity;
+  for (let i = 0; i < arr.length; i++) { if (arr[i]<min) min=arr[i]; if (arr[i]>max) max=arr[i]; }
+  const range = (max-min) || 1;
+  const out = new Float32Array(arr.length);
+  for (let i = 0; i < arr.length; i++) out[i] = (arr[i]-min)/range*255;
+  return out;
+}
+
+// ---- Hessian eigenvalues por diferencias finitas sobre imagen suavizada ----
+function hessianAt(blurred, w, h, x, y) {
+  const xm = Math.max(0,x-1), xp = Math.min(w-1,x+1);
+  const ym = Math.max(0,y-1), yp = Math.min(h-1,y+1);
+  const c = blurred[y*w+x];
+  const l = blurred[y*w+xm], r = blurred[y*w+xp];
+  const u = blurred[ym*w+x], d = blurred[yp*w+x];
+  const ul = blurred[ym*w+xm], ur = blurred[ym*w+xp];
+  const dl = blurred[yp*w+xm], dr = blurred[yp*w+xp];
+  const Ixx = l - 2*c + r;
+  const Iyy = u - 2*c + d;
+  const Ixy = (ur - ul - dr + dl) / 4;
+  return { Ixx, Ixy, Iyy };
+}
+
+function eigen2x2(a, b, d) {
+  // matriz [[a,b],[b,d]]
+  const tr = a+d, det = a*d - b*b;
+  const disc = Math.sqrt(Math.max(0, tr*tr/4 - det));
+  const l1 = tr/2 - disc;
+  const l2 = tr/2 + disc;
+  // |l1| <= |l2|
+  if (Math.abs(l1) <= Math.abs(l2)) return [l1, l2];
+  return [l2, l1];
+}
+
+// ---- Filtro multiescala tipo Sato/Frangi 2D para realce de estructuras curvilíneas ----
+function multiscaleVesselness(gray, w, h, sigmas, brightOnDark = true, beta = 0.5, cFrac = 0.5) {
+  const best = new Float32Array(w*h).fill(0);
+  for (const sigma of sigmas) {
+    const blurred = convolveSeparable(gray, w, h, sigma);
+    const S = new Float32Array(w*h);
+    const L1 = new Float32Array(w*h), L2 = new Float32Array(w*h);
+    let maxS = 0;
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const { Ixx, Ixy, Iyy } = hessianAt(blurred, w, h, x, y);
+        const s2 = sigma*sigma;
+        const a = Ixx*s2, b = Ixy*s2, d = Iyy*s2;
+        const [l1, l2] = eigen2x2(a,b,d);
+        L1[y*w+x] = l1; L2[y*w+x] = l2;
+        const s = Math.sqrt(l1*l1+l2*l2);
+        S[y*w+x] = s;
+        if (s > maxS) maxS = s;
+      }
+    }
+    const c = Math.max(1e-6, maxS * cFrac);
+    for (let i = 0; i < w*h; i++) {
+      const l1 = L1[i], l2 = L2[i];
+      let v = 0;
+      const polarityOk = brightOnDark ? (l2 < 0) : (l2 > 0);
+      if (polarityOk && l2 !== 0) {
+        const Rb = l1/l2;
+        const s = S[i];
+        v = Math.exp(-(Rb*Rb)/(2*beta*beta)) * (1 - Math.exp(-(s*s)/(2*c*c)));
+      }
+      if (v > best[i]) best[i] = v;
+    }
+  }
+  return best;
+}
+
+
+
+/* =============== ORQUESTACIÓN / UI =============== */
+// ---------- Estado global ----------
+let origImg = null, origW = 0, origH = 0;
+let calibPoints = [];
+let pxPerMM = null;
+let lastPipelineResult = null;
+
+const $ = id => document.getElementById(id);
+
+// ---------- Carga de imagen ----------
+$('fileInput').addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const img = new Image();
+  img.onload = () => setOrigImage(img);
+  img.src = URL.createObjectURL(file);
+});
+
+$('loadTestImgBtn').addEventListener('click', () => {
+  // imagen sintética de ejemplo: "hoja" ovalada con nervaduras ramificadas, para probar el flujo sin foto real
+  const w = 500, h = 380;
+  const c = document.createElement('canvas'); c.width=w; c.height=h;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#7fa8c9'; ctx.fillRect(0,0,w,h); // "cielo" azulado, para que el índice de verde separe bien la hoja
+  ctx.save();
+  ctx.translate(w/2,h/2);
+  ctx.fillStyle = '#2f5a2a';
+  ctx.beginPath(); ctx.ellipse(0,0,180,130,0,0,Math.PI*2); ctx.fill();
+  ctx.strokeStyle = '#c8e070'; ctx.lineCap='round';
+  ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(-160,0); ctx.lineTo(160,0); ctx.stroke();
+  ctx.lineWidth = 2;
+  for (let i=-140;i<=140;i+=22){
+    ctx.beginPath(); ctx.moveTo(i,0); ctx.quadraticCurveTo(i+10, -55, i+30,-95); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(i,0); ctx.quadraticCurveTo(i+10, 55, i+30,95); ctx.stroke();
+  }
+  // regla de referencia (10 mm = 40 px en esta imagen sintética)
+  ctx.strokeStyle = '#ffcc55'; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.moveTo(-190,150-190); ctx.lineTo(-150,150-190); ctx.stroke();
+  ctx.restore();
+  const img = new Image();
+  img.onload = () => setOrigImage(img);
+  img.src = c.toDataURL();
+});
+
+function setOrigImage(img) {
+  origImg = img;
+  const maxDim = 700;
+  const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+  origW = Math.round(img.width * scale);
+  origH = Math.round(img.height * scale);
+  const canvas = $('origCanvas');
+  canvas.width = origW; canvas.height = origH;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(img, 0, 0, origW, origH);
+  calibPoints = []; pxPerMM = null;
+  updateCalibStatus();
+  $('calibHint').textContent = 'Imagen cargada. Tocá dos puntos sobre una referencia métrica para calibrar (opcional), y ajustá parámetros si querés.';
+  $('calibPanel').style.display = 'block';
+  $('paramsPanel').style.display = 'block';
+  $('processBtn').disabled = false;
+  drawCalibOverlay();
+}
+
+$('origCanvas').addEventListener('click', e => {
+  if (!origImg) return;
+  const rect = e.target.getBoundingClientRect();
+  const scaleX = e.target.width / rect.width, scaleY = e.target.height / rect.height;
+  const x = (e.clientX - rect.left) * scaleX, y = (e.clientY - rect.top) * scaleY;
+  if (calibPoints.length >= 2) calibPoints = [];
+  calibPoints.push([x,y]);
+  drawCalibOverlay();
+  updateCalibStatus();
+  if (calibPoints.length === 2) {
+    const [p1,p2] = calibPoints;
+    const distPx = Math.hypot(p2[0]-p1[0], p2[1]-p1[1]);
+    const mm = parseFloat($('calibMM').value) || 10;
+    pxPerMM = distPx / mm;
+  }
+});
+
+$('resetCalibBtn').addEventListener('click', () => { calibPoints = []; pxPerMM = null; drawCalibOverlay(); updateCalibStatus(); });
+
+function updateCalibStatus() {
+  $('calibStatus').textContent = `Puntos: ${calibPoints.length} / 2` + (pxPerMM ? ` · escala = ${pxPerMM.toFixed(2)} px/mm` : '');
+}
+
+function drawCalibOverlay() {
+  const canvas = $('origCanvas');
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(origImg, 0, 0, origW, origH);
+  ctx.fillStyle = '#ffcc55'; ctx.strokeStyle = '#ffcc55'; ctx.lineWidth = 2;
+  calibPoints.forEach(([x,y]) => { ctx.beginPath(); ctx.arc(x,y,4,0,Math.PI*2); ctx.fill(); });
+  if (calibPoints.length === 2) {
+    ctx.beginPath(); ctx.moveTo(...calibPoints[0]); ctx.lineTo(...calibPoints[1]); ctx.stroke();
+  }
+}
+
+// ---------- Utilidades de canvas ----------
+function imageToGrayFloat(img, w, h) {
+  const { gray } = imageToGrayAndExG(img, w, h);
+  return gray;
+}
+
+function imageToGrayAndExG(img, w, h) {
+  const c = document.createElement('canvas'); c.width=w; c.height=h;
+  const ctx = c.getContext('2d');
+  ctx.drawImage(img, 0, 0, w, h);
+  const data = ctx.getImageData(0,0,w,h).data;
+  const gray = new Float32Array(w*h);
+  const exg = new Float32Array(w*h); // índice de "exceso de verde": separa la lámina (verde) del fondo (cielo, pared, cinta)
+  for (let i=0;i<w*h;i++){
+    const r=data[i*4], g=data[i*4+1], b=data[i*4+2];
+    gray[i] = 0.299*r + 0.587*g + 0.114*b;
+    exg[i] = 2*g - r - b;
+  }
+  return { gray, exg };
+}
+
+function drawFloatToCanvas(arr, w, h, canvasId, colorFn) {
+  const canvas = $(canvasId);
+  canvas.width = w; canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  const imgData = ctx.createImageData(w,h);
+  for (let i=0;i<w*h;i++){
+    const v = arr[i];
+    const [r,g,b] = colorFn ? colorFn(v) : [v,v,v];
+    imgData.data[i*4]=r; imgData.data[i*4+1]=g; imgData.data[i*4+2]=b; imgData.data[i*4+3]=255;
+  }
+  ctx.putImageData(imgData,0,0);
+}
+
+function drawBinaryToCanvas(grid, canvasId) {
+  const arr = new Float32Array(grid.w*grid.h);
+  for (let i=0;i<arr.length;i++) arr[i] = grid.data[i]?255:0;
+  drawFloatToCanvas(arr, grid.w, grid.h, canvasId);
+}
+
+// ---------- Máscara hoja/fondo (Otsu + componente mayor + recorte de borde) ----------
+function buildLeafMask(maskSignal, w, h, edgeTrim) {
+  // maskSignal: señal usada para separar hoja/fondo (índice de verde ExG si hay color disponible,
+  // o brillo como respaldo). Los valores más altos deben corresponder a la lámina de la hoja.
+  const norm = normalizeTo255(maskSignal);
+  const t = otsuThreshold(norm);
+  // la hoja se asume centrada en el encuadre (criterio habitual de fotografía del protocolo);
+  // se identifica el lado del umbral (más clara u oscura) al que pertenece el píxel central
+  // y se toma su componente conexa como máscara de la hoja.
+  const cx = Math.floor(w/2), cy = Math.floor(h/2);
+  // se muestrea un bloque alrededor del centro (mediana) para no depender de un único píxel
+  // que podría caer justo sobre una nervadura fina
+  const block = 21, half = Math.floor(block/2);
+  const samples = [];
+  for (let dy=-half; dy<=half; dy++) for (let dx=-half; dx<=half; dx++) {
+    const xx = cx+dx, yy = cy+dy;
+    if (xx>=0 && yy>=0 && xx<w && yy<h) samples.push(norm[yy*w+xx]);
+  }
+  samples.sort((a,b)=>a-b);
+  const centerVal = samples[Math.floor(samples.length/2)];
+  const above = centerVal >= t;
+  const cand = { w, h, data: new Uint8Array(w*h) };
+  for (let i=0;i<w*h;i++) cand.data[i] = (above ? norm[i] >= t : norm[i] < t) ? 1 : 0;
+  const { labels, comps } = labelComponents(cand);
+  const centerLabel = labels[cy*w+cx];
+  let mask;
+  if (centerLabel === -1) {
+    // el propio centro no cayó del lado esperado (imagen atípica): usar la componente más grande como respaldo
+    comps.sort((a,b)=>b.length-a.length);
+    mask = { w, h, data: new Uint8Array(w*h) };
+    if (comps[0]) for (const [x,y] of comps[0]) set(mask,x,y,1);
+  } else {
+    mask = { w, h, data: new Uint8Array(w*h) };
+    for (const [x,y] of comps[centerLabel]) set(mask,x,y,1);
+  }
+  // recorte de borde: erosionar `edgeTrim` píxeles desde el borde de la máscara (aprox. por distancia a fondo)
+  if (edgeTrim > 0) {
+    let cur = mask;
+    for (let it=0; it<edgeTrim; it++){
+      const next = { w, h, data: new Uint8Array(w*h) };
+      for (let y=0;y<h;y++) for (let x=0;x<w;x++){
+        if (get(cur,x,y)!==1) continue;
+        let allIn = true;
+        for (const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]) {
+          if (get(cur,x+dx,y+dy)!==1) { allIn=false; break; }
+        }
+        if (allIn) set(next,x,y,1);
+      }
+      cur = next;
+    }
+    mask = cur;
+  }
+  return mask;
+}
+
+// ---------- Corrección de iluminación (flat-field: dividir por versión muy difuminada) ----------
+function illuminationCorrect(gray, w, h) {
+  const sigma = Math.max(w,h) / 8;
+  const blurred = convolveSeparable(gray, w, h, sigma);
+  const out = new Float32Array(w*h);
+  for (let i=0;i<w*h;i++){
+    out[i] = blurred[i] > 1 ? (gray[i] / blurred[i]) * 128 : gray[i];
+  }
+  return normalizeTo255(out);
+}
+
+// ---------- Pipeline principal ----------
+function runPipeline(threshOverride) {
+  const w = origW, h = origH;
+  const { gray, exg } = imageToGrayAndExG(origImg, w, h);
+  drawFloatToCanvas(normalizeTo255(gray), w, h, 'stGray');
+
+  const edgeTrim = parseInt($('edgeTrim').value) || 0;
+  const leafMask = buildLeafMask(exg, w, h, edgeTrim);
+  drawBinaryToCanvas(leafMask, 'stMask');
+
+  const illum = illuminationCorrect(gray, w, h);
+  drawFloatToCanvas(illum, w, h, 'stIllum');
+
+  const sigmaMin = parseFloat($('sigmaMin').value) || 1.0;
+  const sigmaMax = parseFloat($('sigmaMax').value) || 3.0;
+  const numScales = Math.max(1, parseInt($('numScales').value) || 3);
+  const sigmas = [];
+  for (let i=0;i<numScales;i++){
+    sigmas.push(numScales===1 ? sigmaMin : sigmaMin + (sigmaMax-sigmaMin)*i/(numScales-1));
+  }
+  const polarity = $('polaritySel').value === 'bright';
+  const vessel = multiscaleVesselness(illum, w, h, sigmas, polarity);
+  // aplicar máscara de hoja antes de normalizar/umbralizar
+  const vesselMasked = new Float32Array(w*h);
+  for (let i=0;i<w*h;i++) vesselMasked[i] = leafMask.data[i] ? vessel[i] : 0;
+  const vesselNorm = normalizeTo255(vesselMasked);
+  drawFloatToCanvas(vesselNorm, w, h, 'stVessel');
+
+  const minArea = parseInt($('minArea').value) || 15;
+  const bin = { w, h, data: new Uint8Array(w*h) };
+  const autoT = otsuThreshold(vesselNorm.filter((_,i)=>leafMask.data[i]===1));
+  const manual = parseFloat($('manualThreshold').value) || 0;
+  const factor = parseFloat($('thresholdFactor').value) || 0.35;
+  let t = manual > 0 ? manual : autoT * factor;
+  if (threshOverride !== undefined) t = threshOverride;
+  for (let i=0;i<w*h;i++) bin.data[i] = (leafMask.data[i] && vesselNorm[i] >= t) ? 1 : 0;
+  const cleaned = removeSmallComponents(bin, minArea);
+  drawBinaryToCanvas(cleaned, 'stBinary');
+
+  const skeleton = zhangSuenThin(cleaned, 200);
+  drawBinaryToCanvas(skeleton, 'stSkeleton');
+  window.__lastAutoSkeleton = skeleton;
+
+  const minSelfLoop = parseInt($('minSelfLoop').value) || 6;
+  const scale = pxPerMM || 1;
+  const graph = extractGraph(skeleton, scale, minSelfLoop);
+  const indicators = computeIndicators(graph);
+
+  // área de la hoja en mm² para densidad
+  let leafAreaPx = 0;
+  for (let i=0;i<w*h;i++) leafAreaPx += leafMask.data[i];
+  const leafAreaMM2 = pxPerMM ? leafAreaPx / (pxPerMM*pxPerMM) : leafAreaPx;
+  const density = leafAreaMM2 > 0 ? indicators.totalLengthMM / leafAreaMM2 : 0;
+
+  drawGraphOverlay(graph, w, h);
+
+  return { indicators, graph, threshold: t, autoThreshold: autoT, leafAreaMM2, density, calibrated: !!pxPerMM };
+}
+
+function drawGraphOverlay(graph, w, h) {
+  const canvas = $('stGraph');
+  canvas.width = w; canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(origImg, 0, 0, w, h);
+  ctx.strokeStyle = '#5fb87a'; ctx.lineWidth = 1.5;
+  for (const e of graph.edges) {
+    ctx.beginPath();
+    e.path.forEach(([x,y],i)=> i===0?ctx.moveTo(x,y):ctx.lineTo(x,y));
+    ctx.stroke();
+  }
+  for (const n of graph.nodes) {
+    ctx.fillStyle = n.synthetic ? '#e0b34d' : '#e0715f';
+    ctx.beginPath(); ctx.arc(n.x, n.y, 2.5, 0, Math.PI*2); ctx.fill();
+  }
+}
+
+function displayResults(res) {
+  $('indV').textContent = res.indicators.V;
+  $('indE').textContent = res.indicators.E;
+  $('indC').textContent = res.indicators.C;
+  $('indMu').textContent = res.indicators.mu;
+  $('indLen').textContent = res.calibrated ? res.indicators.totalLengthMM.toFixed(1) : res.indicators.totalLengthMM.toFixed(1)+'*';
+  $('indDens').textContent = res.calibrated ? res.density.toFixed(3) : res.density.toFixed(3)+'*';
+  const tbody = document.querySelector('#degreeTable tbody');
+  tbody.innerHTML = '';
+  const counts = {};
+  Object.values(res.indicators.degree).forEach(d => counts[d] = (counts[d]||0)+1);
+  Object.keys(counts).sort((a,b)=>a-b).forEach(d => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${d}</td><td>${counts[d]}</td>`;
+    tbody.appendChild(tr);
+  });
+  $('resultsPanel').style.display = 'block';
+  $('processStatus').innerHTML = res.calibrated
+    ? `Procesado. Umbral usado: ${res.threshold.toFixed(1)} (automático: ${res.autoThreshold}).`
+    : `Procesado. Umbral usado: ${res.threshold.toFixed(1)} (automático: ${res.autoThreshold}). <span class="msg warn">* Sin calibración métrica: longitud/densidad quedan en píxeles, no en mm.</span>`;
+}
+
+$('processBtn').addEventListener('click', () => {
+  $('stagesPanel').style.display = 'block';
+  $('processStatus').textContent = 'Procesando...';
+  setTimeout(() => {
+    lastPipelineResult = runPipeline();
+    displayResults(lastPipelineResult);
+    $('sensitivityBtn').disabled = false;
+    $('sweepBtn').disabled = false;
+    $('exportBtn').disabled = false;
+    showManualPanel();
+  }, 30);
+});
+
+$('sensitivityBtn').addEventListener('click', () => {
+  if (!lastPipelineResult) return;
+  const base = lastPipelineResult.threshold;
+  const variants = [
+    { name: 'Umbral −10%', t: base*0.9 },
+    { name: 'Umbral base', t: base },
+    { name: 'Umbral +10%', t: base*1.1 },
+  ];
+  const rows = variants.map(v => ({ name: v.name, t: v.t, res: runPipeline(v.t) }));
+  const tbody = $('sensitivityBody'); tbody.innerHTML = '';
+  rows.forEach(r => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${r.name}</td><td>${r.t.toFixed(1)}</td><td>${r.res.indicators.V}</td><td>${r.res.indicators.E}</td><td>${r.res.indicators.C}</td><td>${r.res.indicators.mu}</td>`;
+    tbody.appendChild(tr);
+  });
+  function cv(arr){ const m = arr.reduce((a,b)=>a+b,0)/arr.length; if (m===0) return 0; const sd = Math.sqrt(arr.reduce((a,b)=>a+(b-m)**2,0)/arr.length); return (sd/m*100); }
+  const cvV = cv(rows.map(r=>r.res.indicators.V));
+  const cvE = cv(rows.map(r=>r.res.indicators.E));
+  const cvMu = cv(rows.map(r=>r.res.indicators.mu));
+  $('sensitivityCV').textContent = `Coeficiente de variación entre las 3 variantes — |V|: ${cvV.toFixed(1)}% · |E|: ${cvE.toFixed(1)}% · μ: ${cvMu.toFixed(1)}%`;
+  $('sensitivityPanel').style.display = 'block';
+  // volver a mostrar el resultado base en pantalla
+  lastPipelineResult = rows[1].res;
+  displayResults(lastPipelineResult);
+});
+
+$('exportBtn').addEventListener('click', () => {
+  if (!lastPipelineResult) return;
+  const payload = {
+    fecha: new Date().toISOString(),
+    calibracion: { pxPorMM: pxPerMM },
+    parametros: {
+      sigmaMin: parseFloat($('sigmaMin').value), sigmaMax: parseFloat($('sigmaMax').value),
+      numEscalas: parseInt($('numScales').value), recorteBorde: parseInt($('edgeTrim').value),
+      areaMinima: parseInt($('minArea').value), autoBucleMin: parseInt($('minSelfLoop').value),
+      polaridad: $('polaritySel').value, umbralManual: parseFloat($('manualThreshold').value),
+      umbralUsado: lastPipelineResult.threshold, umbralAutomatico: lastPipelineResult.autoThreshold,
+    },
+    indicadores: lastPipelineResult.indicators,
+    areaHojaMM2: lastPipelineResult.leafAreaMM2,
+    densidad: lastPipelineResult.density,
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'resultados_venacion_' + Date.now() + '.json';
+  a.click();
+});
+
+// ---------- Pruebas con grafos sintéticos ----------
+function synthDrawLine(g, x0,y0,x1,y1){
+  const dx = Math.abs(x1-x0), dy = Math.abs(y1-y0);
+  const sx = x0<x1?1:-1, sy=y0<y1?1:-1;
+  let err = dx-dy, x=x0, y=y0;
+  while(true){
+    set(g,x,y,1);
+    if (x===x1 && y===y1) break;
+    const e2=2*err;
+    if (e2>-dy){ err-=dy; x+=sx; }
+    if (e2<dx){ err+=dx; y+=sy; }
+  }
+}
+function synthThick(g,x0,y0,x1,y1,r=1){
+  for (let ox=-r; ox<=r; ox++) for (let oy=-r; oy<=r; oy++) synthDrawLine(g,x0+ox,y0+oy,x1+ox,y1+oy);
+}
+function addNoise(g, prob=0.01) {
+  // agrega pequeñas alteraciones (ruido tipo sal) para simular dificultades reales, sin afectar la topología principal
+  for (let i=0;i<g.data.length;i++){
+    if (Math.random() < prob*0.15) g.data[i] = g.data[i] ? 0 : g.data[i];
+  }
+}
+
+const SYNTHETIC_CASES = [
+  { name: 'Árbol conexo (μ=0)', w:60,h:60, expected:{V:4,E:3,C:1,mu:0}, draw:g=>{
+      synthThick(g,30,10,30,30,1); synthThick(g,30,30,15,50,1); synthThick(g,30,30,45,50,1);
+  }},
+  { name: 'Un ciclo independiente (μ=1)', w:60,h:60, expected:{V:1,E:1,C:1,mu:1}, draw:g=>{
+      synthThick(g,15,15,45,15,1); synthThick(g,45,15,45,45,1);
+      synthThick(g,45,45,15,45,1); synthThick(g,15,45,15,15,1);
+  }},
+  { name: 'Malla con varios ciclos (μ=2)', w:60,h:60, expected:{V:2,E:3,C:1,mu:2}, draw:g=>{
+      synthThick(g,15,15,45,15,1); synthThick(g,45,15,45,45,1);
+      synthThick(g,45,45,15,45,1); synthThick(g,15,45,15,15,1);
+      synthThick(g,15,15,45,45,1);
+  }},
+  { name: 'Dos componentes (una con ciclo)', w:100,h:60, expected:{V:3,E:2,C:2,mu:1}, draw:g=>{
+      synthThick(g,10,10,30,10,1); synthThick(g,30,10,30,30,1);
+      synthThick(g,30,30,10,30,1); synthThick(g,10,30,10,10,1);
+      synthThick(g,60,10,90,40,1);
+  }},
+  { name: 'Multigrafo, 3 trayectos independientes (μ=2)', w:80,h:60, expected:{V:2,E:3,C:1,mu:2}, draw:g=>{
+      synthThick(g,10,30,70,30,1);
+      synthThick(g,10,30,40,10,1); synthThick(g,40,10,70,30,1);
+      synthThick(g,10,30,40,50,1); synthThick(g,40,50,70,30,1);
+  }},
+  { name: 'Dos ciclos compartiendo una arista (8)', w:90,h:60, expected:{V:2,E:3,C:1,mu:2}, draw:g=>{
+      synthThick(g,15,15,45,15,1); synthThick(g,45,15,75,15,1);
+      synthThick(g,15,45,45,45,1); synthThick(g,45,45,75,45,1);
+      synthThick(g,15,15,15,45,1); synthThick(g,45,15,45,45,1); synthThick(g,75,15,75,45,1);
+  }},
+];
+
+$('runSyntheticBtn').addEventListener('click', () => {
+  const tbody = $('syntheticBody'); tbody.innerHTML = '';
+  for (const c of SYNTHETIC_CASES) {
+    const g = { w:c.w, h:c.h, data:new Uint8Array(c.w*c.h) };
+    c.draw(g);
+    addNoise(g);
+    const skel = zhangSuenThin(g);
+    const graph = extractGraph(skel, 10, 6);
+    const ind = computeIndicators(graph);
+    const ok = ind.V===c.expected.V && ind.E===c.expected.E && ind.C===c.expected.C && ind.mu===c.expected.mu;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${c.name}</td>
+      <td>V=${c.expected.V}, E=${c.expected.E}, C=${c.expected.C}, μ=${c.expected.mu}</td>
+      <td>V=${ind.V}, E=${ind.E}, C=${ind.C}, μ=${ind.mu}</td>
+      <td class="${ok?'test-ok':'test-fail'}">${ok?'OK':'FALLA'}</td>`;
+    tbody.appendChild(tr);
+  }
+});
+
+// ---------- Trazado manual de referencia ----------
+let manualStrokes = []; // array de arrays de [x,y] en coords de imagen (origW/origH)
+let manualDrawing = false;
+
+function showManualPanel() {
+  $('manualPanel').style.display = 'block';
+  const bw = origW, bh = origH;
+  const base = $('manualBaseCanvas');
+  base.width = bw; base.height = bh;
+  base.getContext('2d').drawImage(origImg, 0, 0, bw, bh);
+  const draw = $('manualDrawCanvas');
+  draw.width = bw; draw.height = bh;
+  draw.style.width = base.clientWidth + 'px';
+  draw.style.height = base.clientHeight + 'px';
+  manualStrokes = [];
+  redrawManualStrokes();
+}
+
+function manualCanvasPoint(e) {
+  const canvas = $('manualDrawCanvas');
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = canvas.width / rect.width, scaleY = canvas.height / rect.height;
+  const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+  const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+  return [(clientX - rect.left) * scaleX, (clientY - rect.top) * scaleY];
+}
+
+function redrawManualStrokes() {
+  const canvas = $('manualDrawCanvas');
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0,0,canvas.width, canvas.height);
+  ctx.strokeStyle = '#ff5050'; ctx.lineWidth = 3; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  for (const stroke of manualStrokes) {
+    if (stroke.length < 2) continue;
+    ctx.beginPath();
+    stroke.forEach(([x,y],i) => i===0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y));
+    ctx.stroke();
+  }
+}
+
+(function initManualDrawing(){
+  const canvas = $('manualDrawCanvas');
+  let current = null;
+  function start(e){
+    e.preventDefault(); manualDrawing = true;
+    const pt = manualCanvasPoint(e);
+    if (manualMode === 'erase') { eraseAt(pt); }
+    else { current = [pt]; manualStrokes.push(current); }
+  }
+  function move(e){
+    if (!manualDrawing) return; e.preventDefault();
+    const pt = manualCanvasPoint(e);
+    if (manualMode === 'erase') { eraseAt(pt); }
+    else { current.push(pt); redrawManualStrokes(); }
+  }
+  function end(e){ manualDrawing = false; current = null; }
+  canvas.addEventListener('mousedown', start);
+  canvas.addEventListener('mousemove', move);
+  window.addEventListener('mouseup', end);
+  canvas.addEventListener('touchstart', start, {passive:false});
+  canvas.addEventListener('touchmove', move, {passive:false});
+  canvas.addEventListener('touchend', end);
+})();
+
+let manualMode = 'draw';
+const ERASER_RADIUS = 18; // en px de la imagen
+
+function eraseAt(pt) {
+  const [ex, ey] = pt;
+  const newStrokes = [];
+  for (const stroke of manualStrokes) {
+    let current = [];
+    for (const p of stroke) {
+      const d = Math.hypot(p[0]-ex, p[1]-ey);
+      if (d > ERASER_RADIUS) {
+        current.push(p);
+      } else {
+        if (current.length >= 2) newStrokes.push(current);
+        current = [];
+      }
+    }
+    if (current.length >= 2) newStrokes.push(current);
+  }
+  manualStrokes = newStrokes;
+  redrawManualStrokes();
+  // círculo de referencia del borrador (se borra en el próximo redraw)
+  const ctx = $('manualDrawCanvas').getContext('2d');
+  ctx.strokeStyle = 'rgba(255,255,255,0.6)'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.arc(ex, ey, ERASER_RADIUS, 0, Math.PI*2); ctx.stroke();
+}
+
+$('manualEraserBtn').addEventListener('click', () => {
+  manualMode = manualMode === 'draw' ? 'erase' : 'draw';
+  $('manualEraserBtn').textContent = manualMode === 'erase' ? 'Modo: borrando (tocá para dibujar)' : 'Activar goma de borrar';
+  $('manualDrawCanvas').style.cursor = manualMode === 'erase' ? 'cell' : 'crosshair';
+});
+
+$('manualUndoBtn').addEventListener('click', () => { manualStrokes.pop(); redrawManualStrokes(); });
+$('manualClearBtn').addEventListener('click', () => { manualStrokes = []; redrawManualStrokes(); });
+
+function rasterizeManualStrokes(w, h) {
+  const canvas = document.createElement('canvas'); canvas.width=w; canvas.height=h;
+  const ctx = canvas.getContext('2d');
+  ctx.strokeStyle = '#fff'; ctx.lineWidth = 3; ctx.lineCap='round'; ctx.lineJoin='round';
+  for (const stroke of manualStrokes) {
+    if (stroke.length < 2) continue;
+    ctx.beginPath();
+    stroke.forEach(([x,y],i) => i===0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y));
+    ctx.stroke();
+  }
+  const data = ctx.getImageData(0,0,w,h).data;
+  const g = { w, h, data: new Uint8Array(w*h) };
+  for (let i=0;i<w*h;i++) g.data[i] = data[i*4+3] > 0 ? 1 : 0; // canal alfa
+  return g;
+}
+
+function dilateGrid(g, radiusPx) {
+  const w=g.w, h=g.h;
+  let cur = g;
+  const r = Math.max(0, Math.round(radiusPx));
+  for (let it=0; it<r; it++){
+    const next = { w, h, data: new Uint8Array(w*h) };
+    for (let y=0;y<h;y++) for (let x=0;x<w;x++){
+      if (get(cur,x,y)===1) { set(next,x,y,1); continue; }
+      let any=false;
+      for (const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]) { if (get(cur,x+dx,y+dy)===1){ any=true; break; } }
+      if (any) set(next,x,y,1);
+    }
+    cur = next;
+  }
+  return cur;
+}
+
+$('manualComputeBtn').addEventListener('click', () => {
+  if (!lastPipelineResult) return;
+  const w = origW, h = origH;
+  const manualRaw = rasterizeManualStrokes(w, h);
+  const manualSkel = zhangSuenThin(manualRaw, 200);
+  const scale = pxPerMM || 1;
+  const manualGraph = extractGraph(manualSkel, scale, parseInt($('minSelfLoop').value) || 6);
+  const manualInd = computeIndicators(manualGraph);
+
+  // reconstruir la máscara binaria automática (esqueleto) desde el último procesamiento
+  // corriendo el pipeline una vez más para obtener la grilla de esqueleto (no solo los indicadores)
+  const autoSkelGrid = window.__lastAutoSkeleton;
+  if (!autoSkelGrid) { alert('Procesá la imagen primero.'); return; }
+
+  const tolMM = parseFloat($('manualTolerance').value) || 1;
+  const tolPx = pxPerMM ? tolMM * pxPerMM : tolMM;
+
+  // Jaccard / Dice "crudos" (sin tolerancia, superposición estricta)
+  let inter=0, uni=0, manualCount=0, autoCount=0;
+  for (let i=0;i<w*h;i++){
+    const m = manualRaw.data[i], a = autoSkelGrid.data[i];
+    if (m||a) uni++;
+    if (m&&a) inter++;
+    if (m) manualCount++;
+    if (a) autoCount++;
+  }
+  const jaccard = uni>0 ? inter/uni : 0;
+  const dice = (manualCount+autoCount)>0 ? 2*inter/(manualCount+autoCount) : 0;
+
+  // completitud / correctitud con tolerancia
+  const autoDilated = dilateGrid(autoSkelGrid, tolPx);
+  const manualDilated = dilateGrid(manualRaw, tolPx);
+  let correct=0, complete=0;
+  for (let i=0;i<w*h;i++){
+    if (autoSkelGrid.data[i] && manualDilated.data[i]) correct++;
+    if (manualRaw.data[i] && autoDilated.data[i]) complete++;
+  }
+  const correctness = autoCount>0 ? correct/autoCount : 0;
+  const completeness = manualCount>0 ? complete/manualCount : 0;
+
+  const autoInd = lastPipelineResult.indicators;
+  function errAbsRel(a,b){ const abs=Math.abs(a-b); const rel = b!==0 ? abs/b*100 : (a===0?0:100); return {abs, rel}; }
+  const eV = errAbsRel(autoInd.V, manualInd.V), eE = errAbsRel(autoInd.E, manualInd.E), eMu = errAbsRel(autoInd.mu, manualInd.mu);
+
+  const grid = $('manualResultsGrid');
+  grid.innerHTML = `
+    <div class="ind-card"><label>Jaccard</label><div class="indicator-value">${jaccard.toFixed(2)}</div></div>
+    <div class="ind-card"><label>Dice</label><div class="indicator-value">${dice.toFixed(2)}</div></div>
+    <div class="ind-card"><label>Completitud (tol. ${tolMM}mm)</label><div class="indicator-value">${(completeness*100).toFixed(0)}%</div></div>
+    <div class="ind-card"><label>Correctitud (tol. ${tolMM}mm)</label><div class="indicator-value">${(correctness*100).toFixed(0)}%</div></div>
+    <div class="ind-card"><label>V auto / manual</label><div class="indicator-value">${autoInd.V} / ${manualInd.V}</div></div>
+    <div class="ind-card"><label>E auto / manual</label><div class="indicator-value">${autoInd.E} / ${manualInd.E}</div></div>
+    <div class="ind-card"><label>μ auto / manual</label><div class="indicator-value">${autoInd.mu} / ${manualInd.mu}</div></div>
+    <div class="ind-card"><label>Error rel. |V|,|E|,μ</label><div class="indicator-value" style="font-size:14px;">${eV.rel.toFixed(0)}% / ${eE.rel.toFixed(0)}% / ${eMu.rel.toFixed(0)}%</div></div>
+  `;
+});
+
+// ---------- Barrido sistemático del umbral (10% a 100%, paso 5%) ----------
+$('sweepBtn').addEventListener('click', () => {
+  if (!lastPipelineResult) return;
+  $('sweepPanel').style.display = 'block';
+  const tbody = $('sweepBody');
+  tbody.innerHTML = '';
+  const factorInput = $('thresholdFactor');
+  const originalFactor = factorInput.value;
+  const factores = [];
+  for (let f = 10; f <= 100; f += 5) factores.push(f);
+
+  let i = 0;
+  function nextStep() {
+    if (i >= factores.length) {
+      // al terminar, volver a dejar procesada la imagen con el umbral definitivo
+      factorInput.value = originalFactor;
+      factorInput.dispatchEvent(new Event('input'));
+      lastPipelineResult = runPipeline();
+      displayResults(lastPipelineResult);
+      return;
+    }
+    const pct = factores[i];
+    factorInput.value = (pct / 100).toFixed(2);
+    const res = runPipeline();
+    const tr = document.createElement('tr');
+    const marcaElegido = Math.abs(pct - Math.round(parseFloat(originalFactor)*100)) < 0.01 ? ' (elegido)' : '';
+    tr.innerHTML = `<td>${pct}%${marcaElegido}</td><td>${res.indicators.V}</td><td>${res.indicators.E}</td><td>${res.indicators.C}</td><td>${res.indicators.mu}</td>`;
+    tbody.appendChild(tr);
+    i++;
+    setTimeout(nextStep, 60);
+  }
+  nextStep();
+});
+
+</script>
+
+
+</body></html>
